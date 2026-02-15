@@ -1,79 +1,75 @@
-# Debugprobe
+# Debugprobe on RP2040-Zero
 
-Firmware source for the Raspberry Pi Debug Probe SWD/UART accessory. Can also be run on a Raspberry Pi Pico or Pico 2.
+Fork of the [Raspberry Pi Debugprobe](https://github.com/raspberrypi/debugprobe) firmware adapted for the [Waveshare RP2040-Zero](https://www.waveshare.com/wiki/RP2040-Zero).
 
-[Raspberry Pi Debug Probe product page](https://www.raspberrypi.com/products/debug-probe/)
+The RP2040-Zero is a tiny board with the same RP2040 chip as the Pico, but in a much smaller form factor — ideal for a permanent debug probe.
 
-[Raspberry Pi Pico product page](https://www.raspberrypi.com/products/raspberry-pi-pico/)
+## Pin Assignment
 
-[Raspberry Pi Pico 2 product page](https://www.raspberrypi.com/products/raspberry-pi-pico-2/)
+| Function | GPIO | Notes |
+|----------|------|-------|
+| SWCLK | GP10 | SWD clock |
+| SWDIO | GP11 | SWD data |
+| GND | GP12 | Driven low in software as a ground pin |
+| UART TX | GP4 | Target serial RX |
+| UART RX | GP5 | Target serial TX |
+| Reset | GP1 | Target nRESET (active low, optional) |
+| WS2812 LED | GP16 | On-board RGB status LED |
 
-# Documentation
+GP10, GP11, and GP12 are adjacent on the board, giving a convenient 3-pin SWD + GND cluster.
 
-Debug Probe documentation can be found at the [Raspberry Pi Microcontroller Documentation portal](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html#about-the-debug-probe).
+## Building
 
-# Hacking
+Requires Pico SDK v2.0.0+ and the FreeRTOS submodule.
 
-For the purpose of making changes or studying of the code, you may want to compile the code yourself.
-
-First, clone the repository:
 ```
-git clone https://github.com/raspberrypi/debugprobe
-cd debugprobe
-```
-Initialize and update the submodules:
-```
- git submodule update --init --recursive
-```
-Then create and switch to the build directory:
-```
- mkdir build
- cd build
-```
-If your environment doesn't contain `PICO_SDK_PATH`, then either add it to your environment variables with `export PICO_SDK_PATH=/path/to/sdk` or add `-DPICO_SDK_PATH=/path/to/sdk` to the arguments to CMake below.
-
-Run cmake and build the code:
-```
- cmake ..
- make
-```
-Done! You should now have a `debugprobe.uf2` that you can upload to your Debug Probe via the UF2 bootloader.
-
-## Building for the Pico 1
-
-If you want to create the version that runs on the Pico, then you need to invoke `cmake` in the sequence above with the `DEBUG_ON_PICO=ON` option:
-```
+git submodule update --init --recursive --depth 1
+mkdir build
+cd build
 cmake -DDEBUG_ON_PICO=ON ..
+make -j
 ```
-This will build with the configuration for the Pico and call the output program `debugprobe_on_pico.uf2`, as opposed to `debugprobe.uf2` for the accessory hardware.
 
-Note that if you first ran through the whole sequence to compile for the Debug Probe, then you don't need to start back at the top. You can just go back to the `cmake` step and start from there.
+This produces `debugprobe-zero.uf2`. Flash it by holding BOOTSEL on the RP2040-Zero and dragging the file to the USB mass storage drive.
 
-## Building for the Pico 2
+## AutoBaud
 
-If using an existing debugprobe clone:
-- You must completely regenerate your build directory, or use a different one.
-- You must also sync and update submodules.
-- `PICO_SDK_PATH` must point to a version 2.0.0 or greater install.
+To enable automatic UART baud rate detection, set the USB CDC port to the magic baud rate:
 
-```
-git submodule sync
-git submodule update --init --recursive
-mkdir build-pico2
-cd build-pico2
-cmake -DDEBUG_ON_PICO=1 -DPICO_BOARD=pico2 ../
-```
-This will build with the configuration for the Pico 2 and call the output program `debugprobe_on_pico2.uf2`.
-
-# AutoBaud
-
-Mode which automatically detects and sets the UART baud rate as data arrives.
-
-To enable AutoBaud, configure the USB CDC port to the following custom baud rate:
 ```
 9728 (0x2600)
 ```
-> **Note:** Some Linux serial tools cannot set custom baud values. PuTTY on Windows and any terminal that supports arbitrary baud rates works.
 
-Changing the baud rate to any other value disables AutoBaud.
+Setting any other baud rate disables AutoBaud and uses the requested rate.
 
+## WS2812 RGB LED Status
+
+The RP2040-Zero has no regular LED (the Pico's GPIO 25 LED is absent), but it does have a WS2812 addressable RGB LED on GP16. This firmware drives it as a probe status indicator using PIO1.
+
+### Color Scheme
+
+| State | Color | Meaning |
+|-------|-------|---------|
+| USB not connected / suspended | Red | Probe is not ready |
+| USB connected, idle | Blue | Ready, waiting for a debugger to connect |
+| DAP debugger connected | Green | Debugger (e.g. OpenOCD) is attached |
+| Target running | Yellow/Amber | Target MCU is executing code |
+
+Priority (highest to lowest): Target running > DAP connected > USB connected > Disconnected.
+
+Brightness is dimmed to approximately 12% to avoid being blinding at close range.
+
+### Architecture
+
+Multiple FreeRTOS threads set lightweight volatile state flags:
+
+- **USB thread** polls `tud_ready()` each iteration and sets the USB connected state. The mount/unmount/suspend/resume callbacks also update it immediately.
+- **DAP thread** receives `DAP_HostStatus` commands from the debugger, which trigger `LED_CONNECTED_OUT` and `LED_RUNNING_OUT` in DAP_config.h. These set the DAP connected and target running flags.
+
+A single `ws2812_led_update()` function, called from the USB thread, resolves the priority and sends a color to the LED via PIO1. The LED is only written when the color actually changes.
+
+The WS2812 PIO program runs on **PIO1 SM0**, avoiding any conflict with the probe SWD interface (PIO0 SM0) and autobaud detection (PIO0, dynamically claimed).
+
+### Conditional Compilation
+
+The entire WS2812 feature is gated on `#define PROBE_WS2812_LED_PIN` in the board config header. When not defined, all WS2812 functions compile to no-ops via static inline stubs. The standard Debug Probe and Pico board configs are unaffected.

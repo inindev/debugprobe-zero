@@ -46,6 +46,7 @@
 #include "tusb_edpt_handler.h"
 #include "DAP.h"
 #include "hardware/structs/usb.h"
+#include "ws2812_led.h"
 
 // UART0 for debugprobe debug
 // UART1 for debugprobe to target device
@@ -123,6 +124,8 @@ void usb_thread(void *ptr)
         else
             gpio_put(PROBE_USB_CONNECTED_LED, 0);
 #endif
+        ws2812_led_set_usb(tud_ready());
+        ws2812_led_update();
         // If suspended or disconnected, delay for 1ms (20 ticks)
         if (tud_suspended() || !tud_connected())
             xTaskDelayUntil(&wake, 20);
@@ -143,12 +146,22 @@ int main(void) {
     bi_decl_config();
 
     board_init();
+
+    // --- ADD THESE LINES TO FORCE GP12 TO BE GROUND ---
+    gpio_init(12);
+    gpio_set_dir(12, GPIO_OUT);
+    gpio_put(12, 0);
+    // Increase drive strength to sink more current if needed
+    gpio_set_drive_strength(12, GPIO_DRIVE_STRENGTH_12MA);
+    // --------------------------------------------------
+
     usb_serial_init();
     cdc_uart_init();
     tusb_init();
     stdio_uart_init();
 
     DAP_Setup();
+    ws2812_led_init();
 
     probe_info("Welcome to debugprobe!\n");
 
@@ -257,6 +270,8 @@ void tud_suspend_cb(bool remote_wakeup_en)
       autobaud_wait_stop();
     vTaskSuspend(autobaud_taskhandle);
   }
+  ws2812_led_set_usb(false);
+  ws2812_led_update();
   /* slow down clk_sys for power saving ? */
 }
 
@@ -268,6 +283,8 @@ void tud_resume_cb(void)
 	  vTaskResume(dap_taskhandle);
     vTaskResume(autobaud_taskhandle);
   }
+  ws2812_led_set_usb(true);
+  ws2812_led_update();
 }
 
 void tud_unmount_cb(void)
@@ -282,6 +299,10 @@ void tud_unmount_cb(void)
   vTaskSuspend(autobaud_taskhandle);
   vTaskDelete(autobaud_taskhandle);
   was_configured = 0;
+  ws2812_led_set_usb(false);
+  ws2812_led_set_dap_connected(false);
+  ws2812_led_set_dap_running(false);
+  ws2812_led_update();
 }
 
 void tud_mount_cb(void)

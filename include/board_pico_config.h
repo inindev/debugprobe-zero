@@ -31,7 +31,7 @@
 
 // PIO config
 #define PROBE_SM 0
-#define PROBE_PIN_OFFSET 2
+#define PROBE_PIN_OFFSET 10
 #define PROBE_PIN_SWCLK (PROBE_PIN_OFFSET + 0) // 2
 #define PROBE_PIN_SWDIO (PROBE_PIN_OFFSET + 1) // 3
 // Target reset config
@@ -43,7 +43,10 @@
 #define PROBE_UART_INTERFACE uart1
 #define PROBE_UART_BAUDRATE 115200
 
-#define PROBE_USB_CONNECTED_LED 25
+//#define PROBE_USB_CONNECTED_LED 25
+
+// WS2812 RGB LED on RP2040-Zero
+#define PROBE_WS2812_LED_PIN 16
 
 #define PROBE_PRODUCT_STRING "Debugprobe on Pico (CMSIS-DAP)"
 
