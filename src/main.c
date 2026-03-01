@@ -147,13 +147,11 @@ int main(void) {
 
     board_init();
 
-    // --- ADD THESE LINES TO FORCE GP12 TO BE GROUND ---
-    gpio_init(12);
-    gpio_set_dir(12, GPIO_OUT);
-    gpio_put(12, 0);
-    // Increase drive strength to sink more current if needed
-    gpio_set_drive_strength(12, GPIO_DRIVE_STRENGTH_12MA);
-    // --------------------------------------------------
+    // Force PROBE_PIN_GND low to act as ground pin on debug header
+    gpio_init(PROBE_PIN_GND);
+    gpio_set_dir(PROBE_PIN_GND, GPIO_OUT);
+    gpio_put(PROBE_PIN_GND, 0);
+    gpio_set_drive_strength(PROBE_PIN_GND, GPIO_DRIVE_STRENGTH_12MA);
 
     usb_serial_init();
     cdc_uart_init();

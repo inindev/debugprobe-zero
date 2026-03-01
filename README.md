@@ -4,19 +4,53 @@ Fork of the [Raspberry Pi Debugprobe](https://github.com/raspberrypi/debugprobe)
 
 The RP2040-Zero is a tiny board with the same RP2040 chip as the Pico, but in a much smaller form factor — ideal for a permanent debug probe.
 
-## Pin Assignment
+## Debug Header Configurations
+
+The firmware supports two debug header configurations, both built automatically. The pins are contiguous on the RP2040-Zero board edge.
+
+### 3-Pin (default)
+
+Standard SWD connection. Software reset only.
+
+| Header Pin | RP2040-Zero GPIO | Function |
+|------------|-----------------|----------|
+| 1 | GP10 | SWCLK |
+| 2 | GP11 | SWDIO |
+| 3 | GP12 | GND |
+
+### 4-Pin (with hardware reset)
+
+Adds nRESET for hardware reset of the target. Matches the standard ARM 4-pin SWD+Reset header pinout.
+
+| Header Pin | RP2040-Zero GPIO | Function |
+|------------|-----------------|----------|
+| 1 | GP10 | SWCLK |
+| 2 | GP11 | SWDIO |
+| 3 | GP12 | nRESET |
+| 4 | GP13 | GND |
+
+The nRESET pin is active-low, open-drain with pull-up — connect it to the target's RUN pin. This enables `reset halt`, `reset run`, etc. in OpenOCD without needing to physically power-cycle or press buttons on the target.
+
+**Note:** GND pins (GP12 in 3-pin, GP13 in 4-pin) are driven low in software with 12mA drive strength.
+
+### Target Wiring
+
+On a Pico/Pico 2 target:
+
+| Probe Header | Target |
+|-------------|--------|
+| SWCLK | SWD header pin 1 (SWCLK) |
+| SWDIO | SWD header pin 2 (SWDIO) |
+| GND | SWD header pin 3 (GND) |
+| nRESET (4-pin only) | RUN pin (pin 30 on Pico/Pico 2) |
+
+## Other Pin Assignments
 
 | Function | GPIO | Notes |
 |----------|------|-------|
-| SWCLK | GP10 | SWD clock |
-| SWDIO | GP11 | SWD data |
-| GND | GP12 | Driven low in software as a ground pin |
-| UART TX | GP4 | Target serial RX |
-| UART RX | GP5 | Target serial TX |
-| Reset | GP1 | Target nRESET (active low, optional) |
+| UART TX | GP4 | Connect to target serial RX |
+| UART RX | GP5 | Connect to target serial TX |
 | WS2812 LED | GP16 | On-board RGB status LED |
-
-GP10, GP11, and GP12 are adjacent on the board, giving a convenient 3-pin SWD + GND cluster.
 
 ## Building
 
@@ -30,7 +64,23 @@ cmake -DDEBUG_ON_PICO=ON ..
 make -j
 ```
 
-This produces `debugprobe-zero.uf2`. Flash it by holding BOOTSEL on the RP2040-Zero and dragging the file to the USB mass storage drive.
+This produces two firmware files:
+
+| File | Configuration |
+|------|--------------|
+| `debugprobe-zero.uf2` | 3-pin SWD header (SWCLK, SWDIO, GND) |
+| `debugprobe-zero-4pin.uf2` | 4-pin SWD header (SWCLK, SWDIO, nRESET, GND) |
+
+Flash by holding BOOTSEL on the RP2040-Zero and dragging the appropriate `.uf2` file to the USB mass storage drive.
+
+### Building for Pico 2
+
+```
+cmake -DDEBUG_ON_PICO=ON -DPICO_BOARD=pico2 ..
+make -j
+```
+
+This produces `debugprobe-zero2.uf2` and `debugprobe-zero2-4pin.uf2`.
 
 ## AutoBaud
 
